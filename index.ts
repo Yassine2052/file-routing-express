@@ -1,10 +1,10 @@
 import fs from "fs";
 import path from "path";
-import { Express, RequestHandler } from "express";
-import { ExpressMethods, MapRoutesParams, RouteConfig, RouterRequestHandler } from "./types";
-import { functionIsRequestHandler } from "./helpers/validators";
-import { extractDirConfig, extractEndpointName } from "./helpers/extractors";
-import { buildRoutePattern } from "./helpers/builders";
+import { Express } from "express";
+import { MapRoutesParams, RouterRequestHandlersMap } from "./types";
+import { filenameIsJSorTS, functionIsExceptionHandler, functionIsRequestHandler, methodIsExpressMethod } from "./helpers/validators";
+import { extractDirContext, extractEndpointName, extractFileContext } from "./helpers/extractors";
+import { buildRoutePattern, buildRouteWithOneLeadingSlash } from "./helpers/builders";
 
 class FileBasedRouting {
     public readonly base: string;
@@ -30,17 +30,20 @@ class FileBasedRouting {
         }
     
         let parent = parentConfig?.route?.trim() || "/";
-        const parentIsParam = parentConfig?.isParam || false;
 
         const targetStat = fs.statSync(target);
         const basename = path.basename(target.replace(this.base, ""));
         const { name, isParam } = extractEndpointName(path.parse(basename).name);
-        
+
+        route = buildRouteWithOneLeadingSlash(route);
+
         if(targetStat.isDirectory()){
             parent = path.join(parent, basename);
     
             const routes = fs.readdirSync(target);
-            const config = extractDirConfig(target) || { };
+            const { config, middlewares, errorHandler } = extractDirContext(target);
+
+            middlewares.forEach(middleware => this._app.use(route, middleware));
     
             routes
                 .forEach(item => {
@@ -52,57 +55,79 @@ class FileBasedRouting {
                     
                     this.mapRoutes({
                         target: newTarget, 
-                        route: buildRoutePattern(route, name, isParam, parentIsParam, typeof config?.pattern === "string" || config.pattern instanceof RegExp ? config.pattern : undefined), 
+                        route: buildRoutePattern(route, name, isParam, typeof config?.pattern === "string" || config.pattern instanceof RegExp ? config.pattern : undefined), 
                         parentConfig: {
                             route: parent,
-                            isParam
                         }
                     });
                 });
     
+            if(errorHandler) {
+                this._app.use(route, errorHandler);
+            }
+
             return;
         }
     
         if(targetStat.isFile()){
-            if(!basename.toLowerCase().match(/.(js|ts)$/g)) return;
+            if(!filenameIsJSorTS(basename)) return;
             
             const module = require(target);
-    
             if(!module) return;
+            
     
-            const handlers : RouterRequestHandler = {
+            const handlers : RouterRequestHandlersMap = {
                 get: module._get,
                 post: module._post,
                 delete: module._delete,
                 put: module._put,
                 all: module._all
             }
-            
-            const { pattern = {} }: RouteConfig = module.config || {};
-    
-            const commonPattern = typeof pattern === "string" || pattern instanceof RegExp ? pattern : pattern?.all;
-            
-            Object.entries(handlers)
-                .forEach(([ method, handler ]) => {
-                    const expressMethod = method as ExpressMethods;
 
-                    if(!functionIsRequestHandler(handler)) return;    
+            let { config, middlewares, errorHandler } = extractFileContext(target);
+            
+            if(Array.isArray(middlewares)){
+                middlewares.forEach(middleware => this._app.use(route, middleware));
+            }
 
-                    const endpoint = buildRoutePattern(
-                        route,
-                        name,
-                        isParam,
-                        parentIsParam,
-                        (pattern instanceof RegExp || typeof pattern === "string" ? commonPattern : pattern[expressMethod]) || commonPattern
-                    );
-    
-                    this.endpoints.push({
-                        endpoint,
-                        method
-                    });
-    
-                    this._app[expressMethod](endpoint, handler);
-                })
+            const entries = Object.entries(handlers);
+
+            for(const [ method, handler ] of entries) {
+                if(!methodIsExpressMethod(method) || !functionIsRequestHandler(handler)) continue;
+
+                const endpoint = buildRoutePattern(
+                    route,
+                    name,
+                    isParam,
+                    (config.pattern instanceof RegExp || typeof config.pattern === "string" ? config.pattern : (config.pattern?.[method]) || config.pattern?.all),
+                    true
+                );
+
+                
+                if(typeof middlewares === "object" && !Array.isArray(middlewares)) {
+                    if(!Array.isArray(middlewares[method])) {
+                        const middleware = middlewares[method] || middlewares.all;
+                        middleware && this._app.use(endpoint, middleware);
+                    } else {
+                        middlewares[method]?.forEach(middleware => this._app.use(endpoint, middleware));
+                    }
+                }
+
+                this.endpoints.push({
+                    endpoint,
+                    method
+                });
+
+                this._app[method](endpoint, handler);
+
+                if(errorHandler && typeof errorHandler !== "function" && functionIsExceptionHandler(errorHandler[method])) {
+                    this._app.use(endpoint, errorHandler[method]);
+                }
+            }
+            
+            if(functionIsExceptionHandler(errorHandler)) {
+                this._app.use(route, errorHandler);
+            }
         }
     }
 }
