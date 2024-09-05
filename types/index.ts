@@ -1,8 +1,13 @@
-import { NextFunction, Request, RequestHandler, Response } from "express";
+import { Express, ErrorRequestHandler, RequestHandler } from "express";
 
 export type ExpressMethod = "get" | "post" | "delete" | "put" | "all";
 
 export type PartialExpressMethodRecord<T> = Partial<Record<ExpressMethod, T>>
+
+export type FileBasedRoutingOptions = {
+    app: Express, 
+    target?: string
+}
 
 export type RouteConfig = Partial<{
     pattern: RegExp | string | PartialExpressMethodRecord<RegExp | string>
@@ -11,6 +16,18 @@ export type RouteConfig = Partial<{
 export type DirRouteConfig = Partial<{
     pattern: RegExp | string
 }>;
+
+export type FilesHandlerConfig = {
+    route: string, 
+    name: string, 
+    basename: string, 
+    target: string, 
+    isParam: boolean
+};
+
+export type DirsHandlerConfig = FilesHandlerConfig & {
+    parent: string
+}
 
 export type MapRoutesParams = {
     target: string, 
@@ -21,7 +38,7 @@ export type MapRoutesParams = {
 }
 
 export type RouterRequestHandlersMap = Record<ExpressMethod, RequestHandler | undefined>;
-export type ErrorHandler = ((err: Error, req: Request, res: Response, next: NextFunction) => any);
+export type ErrorHandler = ErrorRequestHandler;
 
 export type RouterDirMiddleware = RequestHandler | RequestHandler[];
 
@@ -39,3 +56,14 @@ export type FileRouteContext = {
     middlewares: RouterFileMiddleware,
     errorHandler: RouterFileError;
 }
+
+export type RouterEndpoint = {
+    depth: number,
+    name: string,
+    endpoint: string,
+    method: string,
+    middlewares: string[],
+    errorHandler: string
+}
+
+export type RouterEndpoints = RouterEndpoint[];

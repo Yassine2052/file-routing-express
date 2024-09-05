@@ -1,7 +1,7 @@
-import { RequestHandler } from "express";
-import { ErrorHandler, ExpressMethod } from "../types";
-import { JAVASCRIPT_FILES_EXTENSION_REGEX } from "../constants/regex";
 import fs from "fs";
+import { RequestHandler } from "express";
+import { ErrorHandler, ExpressMethod } from "../../types";
+import { JAVASCRIPT_FILES_EXTENSION_REGEX } from "../constants/regex";
 import { EXPRESS_METHODS_ARRAY } from "../constants";
 
 export function functionIsRequestHandler(handler: any): handler is RequestHandler {
