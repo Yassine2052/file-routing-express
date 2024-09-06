@@ -101,6 +101,7 @@ class FileBasedRouting {
             post: module._post,
             delete: module._delete,
             put: module._put,
+            patch: module._patch,
             all: module._all
         }
 
@@ -138,15 +139,15 @@ class FileBasedRouting {
                     routerEndpoint.middlewares.push(middleware.name);
                 });
             } else if(typeof middlewares === "object") {
-                if(!Array.isArray(middlewares[method])) {
-                    const middleware = middlewares[method];
-
-                    if(middleware) {
-                        this._app.use(endpoint, middleware);
-                        routerEndpoint.middlewares.push(middleware.name);
-                    };
+                const methodMiddlwares = middlewares[method] || middlewares.all;
+                
+                if(!Array.isArray(methodMiddlwares)) {
+                    if(methodMiddlwares) {
+                        this._app.use(endpoint, methodMiddlwares);
+                        routerEndpoint.middlewares.push(methodMiddlwares.name);
+                    }
                 } else {
-                    middlewares[method]?.forEach(middleware => {
+                    methodMiddlwares?.forEach(middleware => {
                         this._app.use(endpoint, middleware);
                         routerEndpoint.middlewares.push(middleware.name);
                     });
@@ -158,9 +159,15 @@ class FileBasedRouting {
 
             this._app[method](endpoint, handler);
 
-            if(errorHandler && typeof errorHandler !== "function" && functionIsExceptionHandler(errorHandler[method])) {
-                this._app.use(endpoint, errorHandler[method]);
-                routerEndpoint.errorHandler = errorHandler[method].name;
+            if(errorHandler) {
+                if(typeof errorHandler !== "function" ) {
+                    errorHandler = errorHandler[method] && errorHandler.all;
+                }
+
+                if(functionIsExceptionHandler(errorHandler)) {
+                    this._app.use(endpoint, errorHandler);
+                    routerEndpoint.errorHandler = errorHandler.name;
+                }
             }
 
             this.endpoints.push(routerEndpoint);

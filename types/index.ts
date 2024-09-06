@@ -1,6 +1,6 @@
 import { Express, ErrorRequestHandler, RequestHandler } from "express";
 
-export type ExpressMethod = "get" | "post" | "delete" | "put" | "all";
+export type ExpressMethod = "get" | "post" | "delete" | "put" | "patch" | "all";
 
 export type PartialExpressMethodRecord<T> = Partial<Record<ExpressMethod, T>>
 
