@@ -99,6 +99,7 @@ function extractFileErrorMiddleware(module: any): RouterFileError {
 
         return errorHandler;
     }
+    
     return undefined;
 }
 
