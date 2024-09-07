@@ -1,4 +1,4 @@
-import { DirRouteContext, ErrorHandler, ExpressMethod, FileRouteContext, RouteConfig, RouterFileError, RouterFileMiddleware } from "../../types";
+import { DirRouteContext, ErrorHandler, ExpressMethod, FileRouteContext, RouteConfig, RouterFileError, RouterFileMiddleware } from "../types";
 import { ENDPOINT_NAME_REGEX } from "../constants/regex";
 import { filenameToJSorTS } from "./builders";
 import { fileExistsAndIsJSorTS, functionIsExceptionHandler, functionIsRequestHandler } from "./validators";
@@ -99,7 +99,7 @@ function extractFileErrorMiddleware(module: any): RouterFileError {
 
         return errorHandler;
     }
-    
+
     return undefined;
 }
 

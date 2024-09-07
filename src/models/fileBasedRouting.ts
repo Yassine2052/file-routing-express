@@ -1,4 +1,4 @@
-import { DirsHandlerConfig, FileBasedRoutingOptions, FilesHandlerConfig, MapRoutesParams, RouterEndpoint, RouterEndpoints, RouterRequestHandlersMap } from "../../types";
+import { DirsHandlerConfig, FileBasedRoutingOptions, FilesHandlerConfig, MapRoutesParams, RouterEndpoint, RouterEndpoints, RouterRequestHandlersMap } from "../types";
 import { Express } from "express";
 import fs from "fs";
 import path from "path";
