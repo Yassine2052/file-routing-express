@@ -10,13 +10,13 @@ export function buildRoutePattern(route: string, name: string, isParam: boolean,
     route = buildRouteWithOneLeadingSlash(route);
     pattern = pattern ? `(${pattern.toString().replace(REGEX_LEFT_SLASH_REGEX, "").replace(REGEX_RIGHT_SLASH_AND_FLAGS_REGEX, "")})` : undefined;
 
-    let endpoint = buildRouteWithOneLeadingSlash(`${route}${name}`);
+    let endpoint =`${route}${name}`;
 
     if(pattern) {
         endpoint = endpoint + (isParam ? pattern : `/${pattern}`)
     }
 
-    return endpoint;
+    return buildRouteWithOneLeadingSlash(endpoint);
 }
 
 export function buildRouteWithOneLeadingSlash(value: string) {
