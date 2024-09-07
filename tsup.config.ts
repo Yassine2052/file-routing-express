@@ -3,7 +3,9 @@ import path from "path";
  
 export default defineConfig({
     format: ['cjs', 'esm'],
-    entry: ['./src/index.ts'],
+    entry: [
+        "src/**/*.ts"
+    ],
     dts: true,
     shims: true,
     skipNodeModulesBundle: true,
@@ -12,4 +14,5 @@ export default defineConfig({
     splitting: false,
     sourcemap: true,
     tsconfig: path.resolve(__dirname, 'tsconfig.json'),
+    outDir: 'dist'              
 });

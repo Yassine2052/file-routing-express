@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "module": "ESNext",
     "esModuleInterop": true,
-    "target": "es6",
+    "target": "ES6",
     "moduleResolution": "node",
     "sourceMap": true,
     "declaration": true,
@@ -13,6 +13,6 @@
     "strict": true
   },
   "lib": ["es2015"],
-  "include": ["src", "__test__", "src/types"],
+  "include": ["src", "__test__"],
   "exclude": ["node_modules"]
 }

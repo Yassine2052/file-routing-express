@@ -8,7 +8,9 @@
     "url": "https://github.com/Yassine2052/file-routing-express"
   },
   "scripts": {
-    "build": "tsup"
+    "build": "tsup",
+    "prepare": "tsup",
+    "test": "nodemon"
   },
   "keywords": [
     "express",
