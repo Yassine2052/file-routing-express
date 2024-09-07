@@ -1,5 +1,5 @@
 import FileBasedRouting from "./models/fileBasedRouting";
-import { FileBasedRoutingOptions } from "./types";
+import  { FileBasedRoutingOptions, DirRouteConfig, RouterDirMiddleware, ErrorHandler, RouterFileError, RouterFileMiddleware, RouteConfig } from "./types";
 
 async function mapRoutes(options: FileBasedRoutingOptions) {
     const router = new FileBasedRouting({...options});
@@ -8,4 +8,4 @@ async function mapRoutes(options: FileBasedRoutingOptions) {
     return { endpoints: router.endpoints, base: router.base }
 }
 
-export { mapRoutes };
+export { mapRoutes, DirRouteConfig, RouterDirMiddleware, RouterFileError, RouterFileMiddleware, ErrorHandler, RouteConfig };

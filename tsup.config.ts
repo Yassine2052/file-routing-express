@@ -3,7 +3,7 @@ import path from "path";
  
 export default defineConfig({
     format: ['cjs', 'esm'],
-    entry: ['./src/index.ts', './src/types/index.ts'],
+    entry: ['./src/index.ts'],
     dts: true,
     shims: true,
     skipNodeModulesBundle: true,

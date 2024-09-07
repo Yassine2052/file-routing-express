@@ -38,8 +38,8 @@ export type MapRoutesParams = {
 }
 
 export type RouterRequestHandlersMap = Record<ExpressMethod, RequestHandler | undefined>;
-export type ErrorHandler = ErrorRequestHandler;
 
+export type ErrorHandler = ErrorRequestHandler;
 export type RouterDirMiddleware = RequestHandler | RequestHandler[];
 
 export type RouterFileMiddleware = RouterDirMiddleware | PartialExpressMethodRecord<RouterDirMiddleware>;
