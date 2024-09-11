@@ -1,4 +1,4 @@
-# file-routing-express
+# file-routing-expressjs
 
 A dependency-free, flexible, system-based file routing for Express.
 
@@ -6,7 +6,7 @@ A dependency-free, flexible, system-based file routing for Express.
 
 
 ```shell
-npm install file-routing-express
+npm install file-routing-expressjs
 ```
 
 ## Usage
@@ -16,7 +16,7 @@ This package integration in your project is very simple. You will need to wrap y
 ```js
 import express from "express";
 import path from "path";
-import { mapRoutes } from "../src/index";
+import { mapRoutes } from "file-routing-expressjs";
 
 const ROUTES_PATH = path.resolve(__dirname, "..", "app", "routes");
 
@@ -238,7 +238,7 @@ export const error = {
 ##### `_config.ts`
 
 ```ts
-import { DirRouteConfig } from "file-routing-express";
+import { DirRouteConfig } from "file-routing-expressjs";
 const config: DirRouteConfig = {
     pattern: "[A-Z]{2}-\\d{4}"
 };
@@ -249,7 +249,7 @@ export default config;
 ##### `_middleware.ts`
 
 ```ts
-import { RouterDirMiddleware } from "file-routing-express";
+import { RouterDirMiddleware } from "file-routing-expressjs";
 import authMiddleware from "../middlewares/authMiddleware";
 import testMiddleware from "../middlewares/testMiddleware";
 
@@ -262,7 +262,7 @@ export const middlewares: RouterDirMiddleware = [
 ##### `_error.ts`
 
 ```ts
-import { ErrorHandler } from "file-routing-express";
+import { ErrorHandler } from "file-routing-expressjs";
 import errorsMiddleware from "../middlewares/errorsMiddleware";
 
 export const errorHandler: ErrorHandler = errorsMiddleware;
@@ -272,7 +272,7 @@ export const errorHandler: ErrorHandler = errorsMiddleware;
 
 ```ts
 import { RequestHandler } from "express";
-import { RouterFileMiddleware, RouterFileError, RouteConfig } from "file-routing-express";
+import { RouterFileMiddleware, RouterFileError, RouteConfig } from "file-routing-expressjs";
 import testMiddleware from "../../middlewares/testMiddleware";
 import authMiddleware from "../../middlewares/authMiddleware";
 import clientErrorHandler from "../../middlewares/clientErrorMiddlware";
