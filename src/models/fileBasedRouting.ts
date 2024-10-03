@@ -56,7 +56,7 @@ class FileBasedRouting {
         const { config, middlewares, errorHandler } = extractDirContext(target);
         const endpoint = buildRoutePattern(route, name, isParam, typeof config?.pattern === "string" || config.pattern instanceof RegExp ? config.pattern : undefined);
 
-        middlewares.forEach(middleware => this._app.use(route, middleware));
+        middlewares.forEach(middleware => this._app.use(endpoint, middleware));
 
         this.endpoints.push({
             depth: this._currentDepth++,
@@ -86,7 +86,7 @@ class FileBasedRouting {
         
         this._currentDepth--;
 
-        if(errorHandler) this._app.use(route, errorHandler);
+        if(errorHandler) this._app.use(endpoint, errorHandler);
     }
 
     private handleFile({route, name, basename, target, isParam}: FilesHandlerConfig) {
