@@ -1,14 +1,15 @@
 import { DirRouteContext, ErrorHandler, ExpressMethod, FileRouteContext, RouteConfig, RouterFileError, RouterFileMiddleware } from "../types";
-import { ENDPOINT_NAME_REGEX } from "../constants/regex";
+import { ENDPOINT_FILE_NAME_REGEX } from "../constants/regex";
 import { filenameToJSorTS } from "./builders";
 import { fileExistsAndIsJSorTS, functionIsExceptionHandler, functionIsRequestHandler } from "./validators";
 import { RequestHandler } from "express";
 
 export function extractEndpointName(name: string) {
-    const regex = ENDPOINT_NAME_REGEX;
+    const regex = ENDPOINT_FILE_NAME_REGEX;
     const match = name.match(regex);
-    const isParam = !!match && match.length === 2;
-    name = isParam ? `:${match.at(1) || name}` : name;
+    const isParam = !!match && match.length >= 2;
+
+    name = isParam ? `:${match[1] || name}` : name;
 
     return { name, isParam };
 }

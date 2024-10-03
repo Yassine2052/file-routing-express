@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsup",
     "prepare": "tsup",
-    "test": "nodemon"
+    "dev": "tsx watch app/index.ts"
   },
   "keywords": [
     "express",
@@ -21,7 +21,7 @@
     "file based routing"
   ],
   "author": "Yassine Hijazi",
-  "license": "ISC",
+  "license": "MIT",
   "description": "A dependency-free, flexible, system-based file routing for Express.",
   "devDependencies": {
     "@types/expo": "^33.0.1",
@@ -29,6 +29,7 @@
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
     "tsup": "^8.2.4",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.4"
   },
   "dependencies": {
