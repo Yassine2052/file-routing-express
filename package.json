@@ -1,6 +1,6 @@
 {
   "name": "file-routing-expressjs",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -9,7 +9,6 @@
   },
   "scripts": {
     "build": "tsup",
-    "prepare": "tsup",
     "dev": "tsx watch app/index.ts"
   },
   "keywords": [
