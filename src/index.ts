@@ -3,7 +3,7 @@ import  { FileBasedRoutingOptions, DirRouteConfig, RouterDirMiddleware, ErrorHan
 
 async function mapRoutes(options: FileBasedRoutingOptions) {
     const router = new FileBasedRouting({...options});
-    router.createRoutes();
+    await router.createRoutes();
 
     return { endpoints: router.endpoints, base: router.base }
 }

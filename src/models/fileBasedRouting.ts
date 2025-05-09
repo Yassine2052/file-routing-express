@@ -19,7 +19,7 @@ class FileBasedRouting {
         this._currentDepth = 0;
     }
 
-    public createRoutes() {
+    public async createRoutes() {
         this.mapRoutes({
             target: this.base,
             route: "/",
@@ -27,7 +27,7 @@ class FileBasedRouting {
         });
     }
 
-    private mapRoutes({target, route, parentConfig}: MapRoutesParams) {
+    private async mapRoutes({target, route, parentConfig}: MapRoutesParams) {
         if(!fs.existsSync(target)){
             return;
         }
@@ -89,10 +89,10 @@ class FileBasedRouting {
         if(errorHandler) this._app.use(endpoint, errorHandler);
     }
 
-    private handleFile({route, name, basename, target, isParam}: FilesHandlerConfig) {
+    private async handleFile({route, name, basename, target, isParam}: FilesHandlerConfig) {
         if(!filenameIsJSorTS(basename)) return;
             
-        const module = require(target);
+        const module = await import(target);
         
         if(!module) return;
 
