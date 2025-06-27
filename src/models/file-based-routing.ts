@@ -99,12 +99,12 @@ class FileBasedRouting {
         if(!module) return;
 
         const handlers : RouterRequestHandlersMap = {
-            get: module._get,
-            post: module._post,
-            delete: module._delete,
-            put: module._put,
-            patch: module._patch,
-            all: module._all
+            get: module._get ?? module.default?._get,
+            post: module._post ?? module.default?._post,
+            delete: module._delete ?? module.default?._delete,
+            put: module._put ?? module.default?._put,
+            patch: module._patch ?? module.default?._patch,
+            all: module._all ?? module.default?._all
         }
 
         let { config, middlewares, errorHandler } = extractFileContext(target);
