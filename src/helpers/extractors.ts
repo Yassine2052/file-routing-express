@@ -22,7 +22,7 @@ export function extractDirConfig(dir: string): RouteConfig {
     }
 
     const module = require(file);
-    return  module.config || module.default || {};
+    return  module.config ?? module.default?.config ?? module.default ?? {};
 }
 
 function extractDirMiddlewares(dir: string): RequestHandler[] {
@@ -32,7 +32,7 @@ function extractDirMiddlewares(dir: string): RequestHandler[] {
     }
 
     const module = require(file);
-    let middlewares: RequestHandler[] = module.middlewares || module.default;
+    let middlewares: RequestHandler[] = module.middlewares ?? module.default?.middleware ?? module.default;
 
     if (!Array.isArray(middlewares)) {
         middlewares = middlewares ? [middlewares] : [];
@@ -50,16 +50,16 @@ function extractDirErrorMiddleware(dir: string): ErrorHandler | undefined {
     }
 
     const module = require(file);
-    const errorHandler: any = module.error || module.default || undefined;
+    const errorHandler: any = module.error ?? module.default?.error ?? module.default ?? undefined;
     return functionIsExceptionHandler(errorHandler) ? errorHandler : undefined;
 }
 
 function extractFileConfig(module: any): RouteConfig {
-    return  module.config || {};
+    return  module.config ?? module.default?.config ?? {};
 }
 
 function extractFileMiddlewares(module: any): RouterFileMiddleware{
-    let middlewares: RouterFileMiddleware = module.middlewares;
+    let middlewares: RouterFileMiddleware = module.middlewares ?? module.default?.middlewares;
     
     if (!Array.isArray(middlewares)) {
         if(typeof middlewares === "object") {
@@ -85,7 +85,7 @@ function extractFileMiddlewares(module: any): RouterFileMiddleware{
 }
 
 function extractFileErrorMiddleware(module: any): RouterFileError {
-    const errorHandler: RouterFileError = module.error || undefined;
+    const errorHandler: RouterFileError = module.error ?? module.default?.error ?? undefined;
 
     if(functionIsExceptionHandler(errorHandler)) return errorHandler;
 

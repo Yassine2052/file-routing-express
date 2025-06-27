@@ -1,4 +1,5 @@
 import { Express, ErrorRequestHandler, RequestHandler } from "express";
+import { errorGuardMiddleware } from "../guards/endpoint-exception";
 
 export type ExpressMethod = "get" | "post" | "delete" | "put" | "patch" | "all";
 
@@ -7,6 +8,7 @@ export type PartialExpressMethodRecord<T> = Partial<Record<ExpressMethod, T>>
 export type FileBasedRoutingOptions = {
     app: Express, 
     target?: string
+    errorGuard?: boolean | typeof errorGuardMiddleware,
 }
 
 export type RouteConfig = Partial<{

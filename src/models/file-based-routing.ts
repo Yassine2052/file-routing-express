@@ -6,18 +6,26 @@ import { extractDirContext, extractEndpointName, extractFileContext } from "../h
 import { buildRoutePattern, buildRouteWithOneLeadingSlash } from "../helpers/builders";
 import { filenameIsJSorTS, functionIsExceptionHandler, functionIsRequestHandler, methodIsExpressMethod } from "../helpers/validators";
 import { pathToFileURL } from "url";
+import { errorGuardMiddleware } from "../guards/endpoint-exception";
 
 class FileBasedRouting {
     public readonly base: string;
     public readonly endpoints: RouterEndpoints;
     private _app: Express; 
     private _currentDepth: number;
+    private readonly errorGuard: typeof errorGuardMiddleware | undefined;
     
-    constructor({app, target}: FileBasedRoutingOptions){   
+    constructor({app, target, errorGuard}: FileBasedRoutingOptions){   
         this.base = target || path.resolve(process.cwd(), "src", "routes");
-        this._app = app;
         this.endpoints = [];
+        this._app = app;
         this._currentDepth = 0;
+        
+        if(typeof errorGuard === "function") {
+            this.errorGuard = errorGuard;
+        } else if(errorGuard === true) {
+            this.errorGuard = errorGuardMiddleware;
+        }
     }
 
     public async createRoutes() {
@@ -135,7 +143,7 @@ class FileBasedRouting {
    
             if(Array.isArray(middlewares)) {
                 middlewares.forEach(middleware => {
-                    routeMiddlewares.push(middleware);
+                    routeMiddlewares.push(this.errorGuard?.(middleware) ?? middleware);
                     routerEndpoint.middlewares.push(middleware.name);
                 });
             } else if(typeof middlewares === "object") {
@@ -143,12 +151,12 @@ class FileBasedRouting {
                 
                 if(!Array.isArray(methodMiddlwares)) {
                     if(methodMiddlwares) {
-                        routeMiddlewares.push(methodMiddlwares)
+                        routeMiddlewares.push(this.errorGuard?.(methodMiddlwares) ?? methodMiddlwares);
                         routerEndpoint.middlewares.push(methodMiddlwares.name);
                     }
                 } else {
                     methodMiddlwares?.forEach(middleware => {
-                        routeMiddlewares.push(middleware)
+                        routeMiddlewares.push(this.errorGuard?.(middleware) ?? middleware);
                         routerEndpoint.middlewares.push(middleware.name);
                     });
                 }
@@ -157,7 +165,7 @@ class FileBasedRouting {
                 routerEndpoint.middlewares.push(middlewares.name);
             }
 
-            this._app[method](endpoint, ...routeMiddlewares, handler);
+            this._app[method](endpoint, ...routeMiddlewares,  this.errorGuard?.(handler) ?? handler);
 
             if(errorHandler) {
                 if(typeof errorHandler !== "function") {
