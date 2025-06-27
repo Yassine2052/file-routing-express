@@ -16,19 +16,34 @@ This package integration in your project is very simple. You will need to wrap y
 ```js
 import express from "express";
 import path from "path";
-import { mapRoutes } from "file-routing-expressjs";
+import { mapRoutes, errorGuardMiddleware } from "file-routing-expressjs";
 
 const ROUTES_PATH = path.resolve(__dirname, "..", "app", "routes");
 
 const app = express();
 
 // Option 1: Basic usage
-mapRoutes({app: app, target: ROUTES_PATH})
+mapRoutes({
+    app: app,
+    target: ROUTES_PATH,
+    errorGuard: true // ✅ Enable automatic async error wrapping
+});
 
-// Option 2: If you need to log the endpoints binded by mapRoutes use this
+// Option 2: Using a custom error guard middleware
+mapRoutes({
+    app: app,
+    target: ROUTES_PATH,
+    errorGuard: errorGuardMiddleware // ✅ Pass your own error guard logic
+});
+
+// Option 3: If you need to log the endpoints
 async function main() {
-    const { endpoints } = await mapRoutes({app: app, target: ROUTES_PATH});
-    console.table(endpoints);
+    const { endpoints } = await mapRoutes({
+        app: app,
+        target: ROUTES_PATH,
+        errorGuard: true
+    });
+    console.table(endpoints);
 }
 
 main();
@@ -40,6 +55,8 @@ app.listen(3000, ()=> console.log("I'm listening mother father"));
 
 - **`target`**: The root directory for your route files. Defaults to `/src/routes`.
 - **`app`**: The instance of the **Express** application used for handling routes.
+- **`errorGuard`**: This prevents the need to manually wrap every async handler with `try/catch`.
+
 ## Routes Directory Structure
 
 Files located in your project's `options.target` directory will automatically correspond to a matching URL path.
@@ -72,6 +89,37 @@ The folder structure is quite simple and straightforward, as you can see. 💀�
 * `/:users<?patter_in_config>/:user/<?pattern_in_index>`
 * `/<?pattern_in_index>`
 * `/posts<?pattern_in_posts>`
+
+## 🔐 Error Guard Option
+
+### What is `errorGuard`?
+
+- If enabled (`true`), it automatically wraps **all your route handlers and middlewares** with an async error handler.
+- Any unhandled promise rejection inside async handlers will be forwarded to Express's error handlers (`.use((err, req, res, next) => {})`).
+- This prevents the need to manually wrap every async handler with `try/catch`.
+
+---
+
+### ✅ Options
+
+| Option       | Type                                      | Description                                                     |
+| -------------| ------------------------------------------| ----------------------------------------------------------------|
+| `errorGuard` | `boolean` or `errorGuardMiddleware`       | Whether to auto-wrap handlers with async error catcher. Defaults to `false`. |
+
+---
+
+### 🚫 Example Without Error Guard
+
+```ts
+export const _get = async (req, res) => {
+    const data = await fetchData(); // ❌ If fetchData throws, Express crashes
+    res.json(data);
+};
+```
+
+### ✅ Example With Error Guard (errorGuard: true)
+
+Any async error in fetchData() will be passed to Express error handler (next(err)).
 
 ## Examples
 
