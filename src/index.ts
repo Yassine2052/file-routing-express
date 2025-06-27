@@ -1,4 +1,4 @@
-import FileBasedRouting from "./models/fileBasedRouting";
+import FileBasedRouting from "./models/file-based-routing";
 import  { FileBasedRoutingOptions, DirRouteConfig, RouterDirMiddleware, ErrorHandler, RouterFileError, RouterFileMiddleware, RouteConfig } from "./types";
 
 async function mapRoutes(options: FileBasedRoutingOptions) {

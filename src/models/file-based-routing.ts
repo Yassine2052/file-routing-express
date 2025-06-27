@@ -5,6 +5,7 @@ import path from "path";
 import { extractDirContext, extractEndpointName, extractFileContext } from "../helpers/extractors";
 import { buildRoutePattern, buildRouteWithOneLeadingSlash } from "../helpers/builders";
 import { filenameIsJSorTS, functionIsExceptionHandler, functionIsRequestHandler, methodIsExpressMethod } from "../helpers/validators";
+import { pathToFileURL } from "url";
 
 class FileBasedRouting {
     public readonly base: string;
@@ -12,8 +13,8 @@ class FileBasedRouting {
     private _app: Express; 
     private _currentDepth: number;
     
-    constructor({app, target}: FileBasedRoutingOptions){
-        this.base = target || path.resolve(__dirname, "src", "routes");
+    constructor({app, target}: FileBasedRoutingOptions){   
+        this.base = target || path.resolve(process.cwd(), "src", "routes");
         this._app = app;
         this.endpoints = [];
         this._currentDepth = 0;
@@ -91,8 +92,9 @@ class FileBasedRouting {
 
     private async handleFile({route, name, basename, target, isParam}: FilesHandlerConfig) {
         if(!filenameIsJSorTS(basename)) return;
-            
-        const module = await import(target);
+        
+        const targetAbsolutePath = pathToFileURL(path.resolve(target)).href;
+        const module = await import(targetAbsolutePath);
         
         if(!module) return;
 
@@ -158,7 +160,7 @@ class FileBasedRouting {
             this._app[method](endpoint, ...routeMiddlewares, handler);
 
             if(errorHandler) {
-                if(typeof errorHandler !== "function" ) {
+                if(typeof errorHandler !== "function") {
                     errorHandler = errorHandler[method] && errorHandler.all;
                 }
 
