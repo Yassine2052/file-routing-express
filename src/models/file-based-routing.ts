@@ -1,29 +1,68 @@
-import { DirsHandlerConfig, FileBasedRoutingOptions, FilesHandlerConfig, MapRoutesParams, RouterEndpoint, RouterEndpoints, RouterRequestHandlersMap } from "../types";
+import {
+    RouteGroupEntryConfig,
+    FileBasedRoutingOptions,
+    RouteEntryConfig,
+    RouteMappingOptions,
+    RouteEndpoint,
+    RouteEndpoints,
+    RouteHandlersMap,
+    Plugin,
+    RouteMiddleware,
+    ExpressMethod,
+    RoutePlugins
+} from "../types";
+
 import { Express, RequestHandler } from "express";
 import fs from "fs";
 import path from "path";
-import { extractDirContext, extractEndpointName, extractFileContext } from "../helpers/extractors";
-import { buildRoutePattern, buildRouteWithOneLeadingSlash } from "../helpers/builders";
-import { filenameIsJSorTS, functionIsExceptionHandler, functionIsRequestHandler, methodIsExpressMethod } from "../helpers/validators";
+
+import {
+    extractDirContext,
+    extractEndpointName,
+    extractFileContext
+} from "../helpers/extractors";
+
+import {
+    buildRoutePattern,
+    buildRouteWithOneLeadingSlash
+} from "../helpers/builders";
+
+import {
+    filenameIsJSorTS,
+    isDefined,
+    isErrorHandler,
+    isFunction,
+    isNotDefined,
+    isRequestHandler,
+    methodIsExpressMethod
+} from "../helpers/validators";
+
 import { pathToFileURL } from "url";
-import { errorGuardMiddleware } from "../guards/endpoint-exception";
+import { errorGuardMiddleware } from "../guards/exception";
+import { InvalidPluginError, InvalidRouteHandler, RoutesRootNotFound, UnknownPluginError } from "../types/exceptions";
+import { tracingMiddleware } from "../guards/tracing";
 
 class FileBasedRouting {
     public readonly base: string;
-    public readonly endpoints: RouterEndpoints;
-    private _app: Express; 
+    public readonly endpoints: RouteEndpoints;
+
+    private _app: Express;
     private _currentDepth: number;
     private readonly errorGuard: typeof errorGuardMiddleware | undefined;
-    
-    constructor({app, target, errorGuard}: FileBasedRoutingOptions){   
+    private readonly plugins: Map<string, Plugin> = new Map();
+    private readonly collectEndpoints: boolean = false;
+
+    constructor({ app, target, errorGuard, plugins, collectEndpoints }: FileBasedRoutingOptions) {
         this.base = target || path.resolve(process.cwd(), "src", "routes");
         this.endpoints = [];
         this._app = app;
         this._currentDepth = 0;
-        
-        if(typeof errorGuard === "function") {
+        this.plugins = this.buildPluginMap(plugins ?? []);
+        this.collectEndpoints = collectEndpoints ?? false;
+
+        if (isFunction(errorGuard)) {
             this.errorGuard = errorGuard;
-        } else if(errorGuard === true) {
+        } else if (errorGuard === true) {
             this.errorGuard = errorGuardMiddleware;
         }
     }
@@ -32,16 +71,14 @@ class FileBasedRouting {
         this.mapRoutes({
             target: this.base,
             route: "/",
-            parentConfig: undefined
+            parentGroup: undefined
         });
     }
 
-    private async mapRoutes({target, route, parentConfig}: MapRoutesParams) {
-        if(!fs.existsSync(target)){
-            return;
-        }
-    
-        let parent = parentConfig?.route?.trim() || "/";
+    private async mapRoutes({ target, route, parentGroup }: RouteMappingOptions) {
+        if (!fs.existsSync(target)) throw new RoutesRootNotFound(target);
+
+        let parent = parentGroup?.route?.trim() || "/";
 
         const targetStat = fs.statSync(target);
         const basename = path.basename(target.replace(this.base, ""));
@@ -49,21 +86,42 @@ class FileBasedRouting {
 
         route = buildRouteWithOneLeadingSlash(route);
 
-        if(targetStat.isDirectory()){
-            return this.handleDir({route, parent, name, basename, target, isParam});
+        if (targetStat.isDirectory()) {
+            return this.handleDir({
+                route,
+                parent,
+                name,
+                basename,
+                target,
+                isParam
+            });
         }
-    
-        if(targetStat.isFile()){
-            return this.handleFile({route, name, basename, target, isParam});
+
+        if (targetStat.isFile()) {
+            return this.handleFile({
+                route,
+                name,
+                basename,
+                target,
+                isParam
+            });
         }
     }
 
-    private handleDir({route, parent, name, basename, target, isParam}: DirsHandlerConfig) {
+    private handleDir({ route, parent, name, basename, target, isParam }: RouteGroupEntryConfig) {
         parent = path.join(parent, basename);
-    
+
         const routes = fs.readdirSync(target);
         const { config, middlewares, errorHandler } = extractDirContext(target);
-        const endpoint = buildRoutePattern(route, name, isParam, typeof config?.pattern === "string" || config.pattern instanceof RegExp ? config.pattern : undefined);
+
+        const endpoint = buildRoutePattern(
+            route,
+            name,
+            isParam,
+            typeof config?.pattern === "string" || config.pattern instanceof RegExp
+                ? config.pattern
+                : undefined
+        );
 
         middlewares.forEach(middleware => this._app.use(endpoint, middleware));
 
@@ -71,115 +129,290 @@ class FileBasedRouting {
             depth: this._currentDepth++,
             name,
             endpoint,
-            method: "-", 
+            method: "-",
             middlewares: middlewares.map(item => item.name),
             errorHandler: errorHandler?.name || "-"
         });
 
-        routes
-            .forEach(item => {
-                if(item.startsWith("_")) return;
+        routes.forEach(item => {
+            if (item.startsWith("_")) return;
 
-                const newTarget = path.join(target, item);
+            const newTarget = path.join(target, item);
+            if (!fs.existsSync(newTarget)) return;
 
-                if(!fs.existsSync(newTarget)) return;
-                
-                this.mapRoutes({
-                    target: newTarget, 
-                    route: endpoint, 
-                    parentConfig: {
-                        route: parent,
-                    }
-                });
+            this.mapRoutes({
+                target: newTarget,
+                route: endpoint,
+                parentGroup: {
+                    route: parent
+                }
             });
-        
+        });
+
         this._currentDepth--;
 
-        if(errorHandler) this._app.use(endpoint, errorHandler);
+        if (errorHandler) this._app.use(endpoint, errorHandler);
     }
 
-    private async handleFile({route, name, basename, target, isParam}: FilesHandlerConfig) {
-        if(!filenameIsJSorTS(basename)) return;
-        
+    private async handleFile({ route, name, basename, target, isParam }: RouteEntryConfig) {
+        if (!filenameIsJSorTS(basename)) return;
+
         const targetAbsolutePath = pathToFileURL(path.resolve(target)).href;
         const module = await import(targetAbsolutePath);
-        
-        if(!module) return;
 
-        const handlers : RouterRequestHandlersMap = {
+        if (!module) return;
+
+        const handlers: RouteHandlersMap = {
             get: module._get ?? module.default?._get,
             post: module._post ?? module.default?._post,
             delete: module._delete ?? module.default?._delete,
             put: module._put ?? module.default?._put,
             patch: module._patch ?? module.default?._patch,
             all: module._all ?? module.default?._all
-        }
+        };
 
         let { config, middlewares, errorHandler } = extractFileContext(target);
 
-        const entries = Object.entries(handlers);
+        for (const [method, handler] of Object.entries(handlers)) {
+            if (!methodIsExpressMethod(method)) continue;
+            if(isNotDefined(handler)) continue;
 
-        for(const [ method, handler ] of entries) {
-            if(!methodIsExpressMethod(method) || !functionIsRequestHandler(handler)) continue;
-
+            this.isRequestHandlerOrThrow(handler, method)
             const endpoint = buildRoutePattern(
                 route,
                 name,
                 isParam,
-                (config.pattern instanceof RegExp || typeof config.pattern === "string" ? config.pattern : (config.pattern?.[method]) || config.pattern?.all),
+                config.pattern instanceof RegExp || typeof config.pattern === "string"
+                    ? config.pattern
+                    : config.pattern?.[method] || config.pattern?.all,
                 true
             );
 
-            const routerEndpoint: RouterEndpoint = {
-                depth: this._currentDepth,
-                name,
-                endpoint,
-                method,
-                middlewares: [],
-                errorHandler: "-"
+            const routeMiddlewares = this.pushMiddlewares(middlewares, method);
+        
+            let routerEndpoint: RouteEndpoint | undefined;
+            if(this.collectEndpoints) {
+                routerEndpoint = {
+                    depth: this._currentDepth,
+                    name,
+                    endpoint,
+                    method,
+                    middlewares: [],
+                    errorHandler: "-"
+                };
+    
+                routerEndpoint.middlewares.push(...routeMiddlewares.map(middleware => middleware.name));
+            }
+
+            const methodPlugins = config.plugins?.[method] ?? config.plugins?.all ?? {};
+
+            const wrappedHandler = this.bindPlugins(handler, route, methodPlugins);
+            this._app[method](
+                endpoint, 
+                tracingMiddleware, 
+                ...routeMiddlewares, 
+                this.errorGuard?.(wrappedHandler) ?? wrappedHandler
+            );
+
+            if (errorHandler) {
+                let resolvedError = errorHandler as typeof errorHandler | undefined;
+
+                if (typeof resolvedError !== "function") {
+                    resolvedError = resolvedError?.[method] || resolvedError?.all;
+                }
+
+                if (isErrorHandler(resolvedError)) {
+                    this._app.use(endpoint, resolvedError);
+                    if(isDefined(routerEndpoint)) routerEndpoint.errorHandler = resolvedError.name;
+                }
+            }
+
+            isDefined(routerEndpoint) && this.endpoints.push(routerEndpoint);
+        }
+    }
+
+    private pushMiddlewares(middlewares: RouteMiddleware, method: ExpressMethod): RequestHandler[] {
+        const routeMiddlewares: RequestHandler[] = [];
+
+        if (Array.isArray(middlewares)) {
+            middlewares.forEach(middleware => {
+                this.isRequestHandlerOrThrow(middleware, method);
+                routeMiddlewares.push(this.errorGuard?.(middleware) ?? middleware);
+            });
+        } else if (middlewares && typeof middlewares === "object") {
+            const methodMiddlewares = middlewares[method] || middlewares.all;
+
+            if (Array.isArray(methodMiddlewares)) {
+                methodMiddlewares.forEach(middleware => {
+                    this.isRequestHandlerOrThrow(middleware, method);
+                    routeMiddlewares.push(this.errorGuard?.(middleware) ?? middleware);
+                });
+            } else if (methodMiddlewares) {
+                this.isRequestHandlerOrThrow(methodMiddlewares, method);
+                routeMiddlewares.push(this.errorGuard?.(methodMiddlewares) ?? methodMiddlewares);
+            }
+        } else if (middlewares) {
+            this.isRequestHandlerOrThrow(middlewares, method);
+            routeMiddlewares.push(this.errorGuard?.(middlewares) ?? middlewares);
+        }
+
+        return routeMiddlewares;
+    }
+
+    private bindPlugins(
+        handler: RequestHandler,
+        route: string,
+        routePlugins: RoutePlugins | undefined
+    ): RequestHandler {
+        if (isNotDefined(routePlugins)) return handler;
+        
+        const active: {
+            plugin: Plugin<any>;
+            config: any;
+        }[] = [];
+        
+        for (const [name, value] of Object.entries(routePlugins)) {
+            const plugin = this.plugins.get(name);
+
+            if (isNotDefined(plugin)) {
+                throw new UnknownPluginError(
+                    name,
+                    route,
+                    [...this.plugins.keys()]
+                );
+            }
+    
+            let enabled = true;
+            let config: any = undefined;
+    
+            if (typeof value === "boolean") {
+                enabled = value;
+            } else {
+                enabled = value.enabled ?? true;
+                config = value.config;
+            }
+    
+            if (!enabled) continue;
+    
+            plugin.validateConfig?.(config);
+            active.push({ plugin, config });
+        }
+
+        let wrapped = handler;
+        for (const { plugin, config } of active) {
+            wrapped = plugin.wrap?.(wrapped, config) ?? wrapped;
+        }
+
+        return async (req, res, next)=> {
+            const ctx = {
+                req,
+                res,
+                state: {},
+                config: undefined as any
             };
 
-            const routeMiddlewares: RequestHandler[] = [];
-   
-            if(Array.isArray(middlewares)) {
-                middlewares.forEach(middleware => {
-                    routeMiddlewares.push(this.errorGuard?.(middleware) ?? middleware);
-                    routerEndpoint.middlewares.push(middleware.name);
-                });
-            } else if(typeof middlewares === "object") {
-                const methodMiddlwares = middlewares[method] || middlewares.all;
-                
-                if(!Array.isArray(methodMiddlwares)) {
-                    if(methodMiddlwares) {
-                        routeMiddlewares.push(this.errorGuard?.(methodMiddlwares) ?? methodMiddlwares);
-                        routerEndpoint.middlewares.push(methodMiddlwares.name);
-                    }
+            const executed: typeof active = [];
+            const delegate = async (i: number)=> {
+                if(i >= active.length) {
+                    await wrapped(req, res, next);
+                    return;
+                };
+
+                let called = false;
+                const nextFn = async ()=> {
+                    if(called) return;
+                    called = true;
+                    await delegate(i + 1)
+                }
+    
+                const entry = active[i];
+                const { plugin, config } = entry;
+    
+                executed.push(entry);
+
+                ctx.config = config;
+                if(isDefined(plugin.onRequest)) {
+                    await plugin.onRequest(ctx, nextFn);
                 } else {
-                    methodMiddlwares?.forEach(middleware => {
-                        routeMiddlewares.push(this.errorGuard?.(middleware) ?? middleware);
-                        routerEndpoint.middlewares.push(middleware.name);
-                    });
+                    await delegate(i + 1);
                 }
-            } else {
-                routeMiddlewares.push(middlewares);
-                routerEndpoint.middlewares.push(middlewares.name);
+
             }
 
-            this._app[method](endpoint, ...routeMiddlewares,  this.errorGuard?.(handler) ?? handler);
+            try {
+                await delegate(0);
+        
+                while(executed.length > 0) {
+                    const { config, plugin } = executed[executed.length - 1];
 
-            if(errorHandler) {
-                if(typeof errorHandler !== "function") {
-                    errorHandler = errorHandler[method] && errorHandler.all;
+                    ctx.config = config;
+            
+                    if (isDefined(plugin.onResponse)) {
+                        await plugin.onResponse(ctx);
+                    }
+                    executed.pop();
                 }
+            } catch (err) {
+                while(executed.length > 0) {
+                    const { config, plugin } = executed.pop()!;
 
-                if(functionIsExceptionHandler(errorHandler)) {
-                    this._app.use(endpoint, errorHandler);
-                    routerEndpoint.errorHandler = errorHandler.name;
+                    ctx.config = config;
+            
+                    if (isDefined(plugin.onError)) {
+                        await plugin.onError(err, ctx);
+                    }
                 }
+            
+                throw err;
             }
-
-            this.endpoints.push(routerEndpoint);
         }
+    }
+
+    private isRequestHandlerOrThrow(handler: RequestHandler, method: ExpressMethod): void {
+        if(!isRequestHandler(handler)) throw new InvalidRouteHandler(method, handler);
+    }
+
+    private buildPluginMap(plugins: Plugin[]): Map<string, Plugin> {
+        const map = new Map<string, Plugin>();
+
+        for (const plugin of plugins) {
+            if (!plugin || typeof plugin !== "object") {
+                throw new InvalidPluginError(`Invalid plugin: expected object`);
+            }
+    
+            if (typeof plugin.name !== "string" || plugin.name.trim() === "") {
+                throw new InvalidPluginError(`Plugin must have a valid name`);
+            }
+    
+            if (map.has(plugin.name)) {
+                throw new InvalidPluginError(`Duplicate plugin name "${plugin.name}"`);
+            }
+    
+            if (isDefined(plugin.wrap) && !isFunction(plugin.wrap)) {
+                throw new InvalidPluginError(`Plugin "${plugin.name}": wrap must be a function`);
+            }
+            
+            if (isDefined(plugin.onRequest) && !isFunction(plugin.onRequest)) {
+                throw new InvalidPluginError(`Plugin "${plugin.name}": onRequest must be a function`);
+            }
+            
+            if (isDefined(plugin.onResponse) && !isFunction(plugin.onResponse)) {
+                throw new InvalidPluginError(`Plugin "${plugin.name}": onResponse must be a function`);
+            }
+            
+            if (isDefined(plugin.onError) && !isFunction(plugin.onError)) {
+                throw new InvalidPluginError(`Plugin "${plugin.name}": onError must be a function`);
+            }
+            
+            if (isDefined(plugin.validateConfig) && !isFunction(plugin.validateConfig)) {
+                throw new InvalidPluginError(`Plugin "${plugin.name}": validateConfig must be a function`);
+            }
+            
+            Object.freeze(plugin);
+            map.set(plugin.name, plugin);
+        }
+    
+        return map;
     }
 }
 

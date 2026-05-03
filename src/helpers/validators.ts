@@ -1,15 +1,20 @@
 import fs from "fs";
 import { RequestHandler } from "express";
-import { ErrorHandler, ExpressMethod } from "../types";
+import { RouteErrorHandler, ExpressMethod } from "../types";
 import { JAVASCRIPT_FILES_EXTENSION_REGEX } from "../constants/regex";
 import { EXPRESS_METHODS_ARRAY } from "../constants";
+import { InvalidRouteHandler } from "../types/exceptions";
 
-export function functionIsRequestHandler(handler: any): handler is RequestHandler {
-    return typeof handler === 'function' && [2, 3].includes(handler.length);
+export function isFunction(value: any): value is Function {
+    return typeof value === "function";
 }
 
-export function functionIsExceptionHandler(handler: any): handler is ErrorHandler {
-    return typeof handler === 'function' && handler.length === 4;
+export function isRequestHandler(handler: any): handler is RequestHandler {
+    return isFunction(handler);
+}
+
+export function isErrorHandler(handler: any): handler is RouteErrorHandler {
+    return isFunction(handler) && handler.length === 4;
 }
 
 export function filenameIsJSorTS(filename: string) {
@@ -26,4 +31,12 @@ export function fileExistsAndIsJSorTS(filePath: string) {
 
 export function methodIsExpressMethod(method: string): method is ExpressMethod {
     return EXPRESS_METHODS_ARRAY.includes(method as ExpressMethod);
+}
+
+export function isDefined<T>(value: T): value is NonNullable<T> {
+    return value !== null && value !== undefined;
+}
+
+export function isNotDefined<T>(value: T): value is Extract<T, null | undefined> {
+    return value === null || value === undefined;
 }

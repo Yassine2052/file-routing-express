@@ -1,15 +1,28 @@
-import { DirRouteContext, ErrorHandler, ExpressMethod, FileRouteContext, RouteConfig, RouterFileError, RouterFileMiddleware } from "../types";
+import {
+    RouteGroupContext,
+    RouteErrorHandler,
+    ExpressMethod,
+    RouteDefinitionContext,
+    RouteConfig,
+    RouteErrorMap,
+    RouteMiddleware
+} from "../types";
+
 import { ENDPOINT_FILE_NAME_REGEX } from "../constants/regex";
 import { filenameToJSorTS } from "./builders";
-import { fileExistsAndIsJSorTS, functionIsExceptionHandler, functionIsRequestHandler } from "./validators";
+import {
+    fileExistsAndIsJSorTS,
+    isErrorHandler,
+    isRequestHandler
+} from "./validators";
+
 import { RequestHandler } from "express";
 
 export function extractEndpointName(name: string) {
-    const regex = ENDPOINT_FILE_NAME_REGEX;
-    const match = name.match(regex);
+    const match = name.match(ENDPOINT_FILE_NAME_REGEX);
     const isParam = !!match && match.length >= 2;
 
-    name = isParam ? `:${match[1] || name}` : name;
+    name = isParam ? `:${match![1] || name}` : name;
 
     return { name, isParam };
 }
@@ -17,94 +30,101 @@ export function extractEndpointName(name: string) {
 export function extractDirConfig(dir: string): RouteConfig {
     const file = filenameToJSorTS(dir, "_config");
 
-    if (!file) {
-        return {};
-    }
+    if (!file) return {};
 
     const module = require(file);
-    return  module.config ?? module.default?.config ?? module.default ?? {};
+    return module.config ?? module.default?.config ?? module.default ?? {};
 }
 
 function extractDirMiddlewares(dir: string): RequestHandler[] {
     const file = filenameToJSorTS(dir, "_middleware");
-    if (!file) {
-        return [];
-    }
+    if (!file) return [];
 
     const module = require(file);
-    let middlewares: RequestHandler[] = module.middlewares ?? module.default?.middleware ?? module.default;
+
+    let middlewares: RequestHandler[] =
+        module.middlewares ?? module.default?.middleware ?? module.default;
 
     if (!Array.isArray(middlewares)) {
         middlewares = middlewares ? [middlewares] : [];
     }
 
-    return middlewares.filter(functionIsRequestHandler);
+    return middlewares.filter(isRequestHandler);
 }
 
-
-function extractDirErrorMiddleware(dir: string): ErrorHandler | undefined {
+function extractDirErrorMiddleware(dir: string): RouteErrorHandler | undefined {
     const file = filenameToJSorTS(dir, "_error");
-
-    if (!file) {
-        return undefined;
-    }
+    if (!file) return undefined;
 
     const module = require(file);
-    const errorHandler: any = module.error ?? module.default?.error ?? module.default ?? undefined;
-    return functionIsExceptionHandler(errorHandler) ? errorHandler : undefined;
+
+    const errorHandler =
+        module.error ?? module.default?.error ?? module.default ?? undefined;
+
+    return isErrorHandler(errorHandler)
+        ? errorHandler
+        : undefined;
 }
 
 function extractFileConfig(module: any): RouteConfig {
-    return  module.config ?? module.default?.config ?? {};
+    return module.config ?? module.default?.config ?? {};
 }
 
-function extractFileMiddlewares(module: any): RouterFileMiddleware{
-    let middlewares: RouterFileMiddleware = module.middlewares ?? module.default?.middlewares;
-    
-    if (!Array.isArray(middlewares)) {
-        if(typeof middlewares === "object") {
-            const entries = Object.entries(middlewares);
+function extractFileMiddlewares(module: any): RouteMiddleware {
+    let middlewares: RouteMiddleware =
+        module.middlewares ?? module.default?.middlewares;
 
-            for(let [method, middleware] of entries) {
-                const expressMethod = method as ExpressMethod;
+    if (middlewares && typeof middlewares === "object" && !Array.isArray(middlewares)) {
+        const result: Partial<Record<ExpressMethod, RequestHandler[]>> = {};
 
-                if(!Array.isArray(middleware)) {
-                    middleware = middleware ? [middleware] : []
-                }
+        for (const [method, middleware] of Object.entries(middlewares)) {
+            const expressMethod = method as ExpressMethod;
 
-                middlewares[expressMethod] = middleware.filter(functionIsRequestHandler);
-            }
+            const list = Array.isArray(middleware)
+                ? middleware
+                : middleware
+                ? [middleware]
+                : [];
 
-            return middlewares;
+            result[expressMethod] = list.filter(isRequestHandler);
         }
 
+        return result;
+    }
+
+    if (!Array.isArray(middlewares)) {
         middlewares = middlewares ? [middlewares] : [];
     }
 
-    return middlewares.filter(functionIsRequestHandler);
+    return middlewares.filter(isRequestHandler);
 }
 
-function extractFileErrorMiddleware(module: any): RouterFileError {
-    const errorHandler: RouterFileError = module.error ?? module.default?.error ?? undefined;
+function extractFileErrorMiddleware(module: any): RouteErrorMap {
+    const raw =
+        module.error ?? module.default?.error ?? undefined;
 
-    if(functionIsExceptionHandler(errorHandler)) return errorHandler;
+    if (isErrorHandler(raw)) {
+        return raw;
+    }
 
-    if(typeof errorHandler === "object") {
-        const entries = Object.entries(errorHandler);
+    if (raw && typeof raw === "object") {
+        const result: Partial<Record<ExpressMethod, RouteErrorHandler | undefined>> = {};
 
-        for(let [method, nestedErrorHandler] of entries) {
+        for (const [method, handler] of Object.entries(raw)) {
             const expressMethod = method as ExpressMethod;
 
-            errorHandler[expressMethod] = functionIsExceptionHandler(nestedErrorHandler) ? nestedErrorHandler : undefined;
+            result[expressMethod] = isErrorHandler(handler)
+                ? handler
+                : undefined;
         }
 
-        return errorHandler;
+        return result;
     }
 
     return undefined;
 }
 
-export function extractDirContext(target: string): DirRouteContext {
+export function extractDirContext(target: string): RouteGroupContext {
     const config = extractDirConfig(target);
     const middlewares = extractDirMiddlewares(target);
     const errorHandler = extractDirErrorMiddleware(target);
@@ -116,8 +136,8 @@ export function extractDirContext(target: string): DirRouteContext {
     };
 }
 
-export function extractFileContext(target: string): FileRouteContext {
-    if(!fileExistsAndIsJSorTS(target)) {
+export function extractFileContext(target: string): RouteDefinitionContext {
+    if (!fileExistsAndIsJSorTS(target)) {
         return {
             config: {},
             middlewares: [],
@@ -126,6 +146,7 @@ export function extractFileContext(target: string): FileRouteContext {
     }
 
     const module = require(target);
+
     const config = extractFileConfig(module);
     const middlewares = extractFileMiddlewares(module);
     const errorHandler = extractFileErrorMiddleware(module);

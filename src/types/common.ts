@@ -1,0 +1,1 @@
+export type MapIndex = string | number | symbol;
