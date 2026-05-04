@@ -23,7 +23,6 @@
   "license": "MIT",
   "description": "A dependency-free, flexible, system-based file routing for Express.",
   "devDependencies": {
-    "@types/expo": "^33.0.1",
     "@types/express": "^4.17.21",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
