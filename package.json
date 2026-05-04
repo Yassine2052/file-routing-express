@@ -31,6 +31,10 @@
     "typescript": "^5.5.4"
   },
   "dependencies": {
+    "commander": "^14.0.3",
     "express": "^5.1.0"
+  },
+  "bin": {
+    "fre": "dist/cli/index.js"
   }
 }

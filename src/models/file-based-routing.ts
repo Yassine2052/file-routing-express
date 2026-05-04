@@ -41,13 +41,15 @@ import { pathToFileURL } from "url";
 import { errorGuardMiddleware } from "../guards/exception";
 import { InvalidPluginError, InvalidRouteHandler, RoutesRootNotFound, UnknownPluginError } from "../types/exceptions";
 import { tracingMiddleware } from "../guards/tracing";
+import { logger } from "../helpers/logging";
 
 class FileBasedRouting {
     public readonly base: string;
     public readonly endpoints: RouteEndpoints;
 
+    private readonly endpointsQueue: RouteEndpoints;
+
     private _app: Express;
-    private _currentDepth: number;
     private readonly errorGuard: typeof errorGuardMiddleware | undefined;
     private readonly plugins: Map<string, Plugin> = new Map();
     private readonly collectEndpoints: boolean = false;
@@ -55,10 +57,11 @@ class FileBasedRouting {
     constructor({ app, target, errorGuard, plugins, collectEndpoints }: FileBasedRoutingOptions) {
         this.base = target || path.resolve(process.cwd(), "src", "routes");
         this.endpoints = [];
-        this._app = app;
-        this._currentDepth = 0;
+        this.endpointsQueue = [];
         this.plugins = this.buildPluginMap(plugins ?? []);
         this.collectEndpoints = collectEndpoints ?? false;
+
+        this._app = app;
 
         if (isFunction(errorGuard)) {
             this.errorGuard = errorGuard;
@@ -68,7 +71,7 @@ class FileBasedRouting {
     }
 
     public async createRoutes() {
-        this.mapRoutes({
+        await this.mapRoutes({
             target: this.base,
             route: "/",
             parentGroup: undefined
@@ -93,7 +96,7 @@ class FileBasedRouting {
                 name,
                 basename,
                 target,
-                isParam
+                isParam,
             });
         }
 
@@ -103,12 +106,12 @@ class FileBasedRouting {
                 name,
                 basename,
                 target,
-                isParam
+                isParam,
             });
         }
     }
 
-    private handleDir({ route, parent, name, basename, target, isParam }: RouteGroupEntryConfig) {
+    private async handleDir({ route, parent, name, basename, target, isParam }: RouteGroupEntryConfig) {
         parent = path.join(parent, basename);
 
         const routes = fs.readdirSync(target);
@@ -125,31 +128,41 @@ class FileBasedRouting {
 
         middlewares.forEach(middleware => this._app.use(endpoint, middleware));
 
-        this.endpoints.push({
-            depth: this._currentDepth++,
-            name,
-            endpoint,
-            method: "-",
-            middlewares: middlewares.map(item => item.name),
-            errorHandler: errorHandler?.name || "-"
-        });
+        if(this.collectEndpoints) {
+            const routeEndpoint: RouteEndpoint = {
+                depth: this.endpointsQueue.length,
+                name,
+                endpoint,
+                method: "-",
+                middlewares: middlewares.map(item => item.name),
+                errorHandler: errorHandler?.name || "-",
+                plugins: [],
+                children: []
+            };
 
-        routes.forEach(item => {
+            const parent = this.endpointsQueue.at(this.endpointsQueue.length - 1)?.children ?? this.endpoints;
+            parent.push(routeEndpoint);
+            this.endpointsQueue.push(routeEndpoint);
+        }
+
+        for(const item of routes) {
             if (item.startsWith("_")) return;
 
             const newTarget = path.join(target, item);
             if (!fs.existsSync(newTarget)) return;
 
-            this.mapRoutes({
+            await this.mapRoutes({
                 target: newTarget,
                 route: endpoint,
                 parentGroup: {
-                    route: parent
+                    route: parent,
                 }
             });
-        });
+        }
 
-        this._currentDepth--;
+        if(this.collectEndpoints) {
+            this.endpointsQueue.pop();
+        }
 
         if (errorHandler) this._app.use(endpoint, errorHandler);
     }
@@ -174,8 +187,7 @@ class FileBasedRouting {
         let { config, middlewares, errorHandler } = extractFileContext(target);
 
         for (const [method, handler] of Object.entries(handlers)) {
-            if (!methodIsExpressMethod(method)) continue;
-            if(isNotDefined(handler)) continue;
+            if (!methodIsExpressMethod(method) || isNotDefined(handler)) continue;
 
             this.isRequestHandlerOrThrow(handler, method)
             const endpoint = buildRoutePattern(
@@ -189,21 +201,6 @@ class FileBasedRouting {
             );
 
             const routeMiddlewares = this.pushMiddlewares(middlewares, method);
-        
-            let routerEndpoint: RouteEndpoint | undefined;
-            if(this.collectEndpoints) {
-                routerEndpoint = {
-                    depth: this._currentDepth,
-                    name,
-                    endpoint,
-                    method,
-                    middlewares: [],
-                    errorHandler: "-"
-                };
-    
-                routerEndpoint.middlewares.push(...routeMiddlewares.map(middleware => middleware.name));
-            }
-
             const methodPlugins = config.plugins?.[method] ?? config.plugins?.all ?? {};
 
             const wrappedHandler = this.bindPlugins(handler, route, methodPlugins);
@@ -213,6 +210,22 @@ class FileBasedRouting {
                 ...routeMiddlewares, 
                 this.errorGuard?.(wrappedHandler) ?? wrappedHandler
             );
+  
+            let routerEndpoint: RouteEndpoint | undefined;
+            if(this.collectEndpoints) {
+                routerEndpoint = {
+                    depth: this.endpointsQueue.length,
+                    name,
+                    endpoint,
+                    method,
+                    middlewares: [],
+                    errorHandler: "-",
+                    plugins: Object.keys(methodPlugins),
+                    children: []
+                };
+    
+                routerEndpoint.middlewares.push(...routeMiddlewares.map(middleware => middleware.name));
+            }
 
             if (errorHandler) {
                 let resolvedError = errorHandler as typeof errorHandler | undefined;
@@ -227,7 +240,10 @@ class FileBasedRouting {
                 }
             }
 
-            isDefined(routerEndpoint) && this.endpoints.push(routerEndpoint);
+            if(isDefined(routerEndpoint)){
+                const parent = this.endpointsQueue.at(this.endpointsQueue.length - 1)?.children ?? this.endpoints;
+                parent.push(routerEndpoint);
+            };
         }
     }
 
@@ -275,6 +291,11 @@ class FileBasedRouting {
             const plugin = this.plugins.get(name);
 
             if (isNotDefined(plugin)) {
+                if (this.collectEndpoints) {
+                    logger.warn(`Unknown plugin "${name}" in route "${route}"`);
+                    continue;
+                }
+
                 throw new UnknownPluginError(
                     name,
                     route,
@@ -413,6 +434,28 @@ class FileBasedRouting {
         }
     
         return map;
+    }
+
+    public static async collectRoutes(target: string) {
+        const fakeApp = {
+            use: () => {},
+            get: () => {},
+            post: () => {},
+            put: () => {},
+            patch: () => {},
+            delete: () => {},
+            all: () => {}
+        } as unknown as Express;
+
+        const instance = new FileBasedRouting({
+            app: fakeApp,
+            target,
+            collectEndpoints: true
+        });
+
+        await instance.createRoutes();
+
+        return instance.endpoints;
     }
 }
 

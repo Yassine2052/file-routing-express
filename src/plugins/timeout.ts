@@ -23,7 +23,6 @@ const timeoutPlugin: Plugin<TimeoutConfig> = {
             req.signal = abortController.signal;
 
             try {
-                console.log("TIMEOUT", config)
                 await withTimeout(exec(), config.ms, abortController);
             } catch (err) {
                 if (err instanceof TimeoutError) {
@@ -35,7 +34,6 @@ const timeoutPlugin: Plugin<TimeoutConfig> = {
 
                 throw err;
             } finally {
-                console.log("FINALLY")
                 delete req.signal;
             }
         };

@@ -9,7 +9,6 @@ export async function withTimeout<T = any>(
 
     const timer = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
-            console.log("TIMED FUCKING OUT")
             if (abortController) {
                 abortController.abort();
             }

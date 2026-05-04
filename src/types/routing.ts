@@ -107,6 +107,8 @@ export type RouteEndpoint = {
     method: string;
     middlewares: string[];
     errorHandler: string;
+    plugins: string[];
+    children: RouteEndpoint[]
 };
 
 export type RouteEndpoints = RouteEndpoint[];

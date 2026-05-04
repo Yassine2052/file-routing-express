@@ -6,5 +6,6 @@ nodemon.json
 
 .env
 
-/src/routes
 /src/app
+
+.fre
