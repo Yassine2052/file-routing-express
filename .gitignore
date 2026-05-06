@@ -5,7 +5,5 @@
 nodemon.json
 
 .env
-
-/src/app
-
 .fre
+/src/app
