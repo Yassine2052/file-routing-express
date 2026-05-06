@@ -203,6 +203,7 @@ export const config = {
 ### Middleware
 
 You can apply route-specific middleware in Express by exporting an array of request handlers directly from your route file.
+
 #### For a directory
 
 In the example above, there's a file named `/[users]/_middleware.ts`. In this file, you should export a middleware or the list of middlewares you want to apply on the endpoint (`/users` in this case). The middleware will wrap all the sub routes of `/:users`
@@ -341,3 +342,267 @@ export const _get: RequestHandler = (req, res, next)=> {...}
 export const _post: RequestHandler = (req, res, next)=> {...}
 export const _put: RequestHandler = (req, res, next)=> {...}
 ```
+
+### Plugins
+
+Plugins allow you to wrap route handlers with reusable behaviors such as:
+
+- caching
+- retry logic
+- circuit breakers
+- timeouts
+- logging
+- rate limiting
+- custom wrappers
+
+Plugins are executed in the order defined by the developer.
+
+---
+
+#### ⚠️ Execution Order
+
+Plugin order matters.
+
+```js
+export const config = {
+    plugins: {
+        get: {
+            auth: true,
+            cache: true,
+            timeout: true
+        }
+    }
+};
+````
+
+is NOT equivalent to:
+
+```js
+export const config = {
+    plugins: {
+        get: {
+            timeout: true,
+            auth: true,
+            cache: true
+        }
+    }
+};
+```
+
+The framework does not reorder plugins automatically.
+
+The developer is responsible for defining the correct order.
+
+---
+
+#### Plugin Registration
+
+Plugins must first be registered globally through `mapRoutes`.
+
+```js
+import cachePlugin from "./plugins/cachePlugin";
+import timeoutPlugin from "./plugins/timeoutPlugin";
+import retryPlugin from "./plugins/retryPlugin";
+
+mapRoutes({
+    app,
+    target: ROUTES_PATH,
+
+    plugins: [
+        cachePlugin,
+        timeoutPlugin,
+        retryPlugin
+    ]
+});
+```
+
+---
+
+#### For JS/TS files
+
+Plugins are configured through the route `config` object.
+
+```js
+export const config = {
+    plugins: {
+        get: {
+            cache: true,
+
+            timeout: {
+                config: {
+                    ms: 5000
+                }
+            }
+        },
+
+        post: {
+            retry: {
+                config: {
+                    retries: 3,
+                    delay: 1000
+                }
+            }
+        },
+
+        all: {
+            "circuit-breaker": {
+                enabled: true,
+
+                config: {
+                    threshold: 5,
+                    cooldown: 10000
+                }
+            }
+        }
+    }
+};
+```
+
+---
+
+#### Plugin Options
+
+Plugins support two declaration modes.
+
+##### Boolean mode
+
+```js
+cache: true
+```
+
+Enables the plugin with its default configuration.
+
+---
+
+##### Object mode
+
+```js
+timeout: {
+    enabled: true,
+
+    config: {
+        ms: 5000
+    }
+}
+```
+
+Allows enabling/disabling the plugin and passing custom configuration.
+
+---
+
+#### Built-in Plugins
+
+##### Cache Plugin
+
+Caches route responses in memory.
+
+```js
+export const config = {
+    plugins: {
+        get: {
+            cache: {
+                config: {
+                    ttl: 60000,
+                    max: 100
+                }
+            }
+        }
+    }
+};
+```
+
+---
+
+##### Timeout Plugin
+
+Cancels long-running requests.
+
+```js
+export const config = {
+    plugins: {
+        get: {
+            timeout: {
+                config: {
+                    ms: 5000
+                }
+            }
+        }
+    }
+};
+```
+
+**Note**: Developers should use `req.signal` inside async operations to properly support request cancellation.
+
+---
+
+##### Circuit Breaker Plugin
+
+Protects unstable endpoints from repeated failures.
+
+```js
+export const config = {
+    plugins: {
+        get: {
+            "circuit-breaker": {
+                config: {
+                    threshold: 5,
+                    cooldown: 10000
+                }
+            }
+        }
+    }
+};
+```
+
+---
+
+##### Retry Plugin
+
+Retries failed handlers automatically.
+
+```js
+export const config = {
+    plugins: {
+        get: {
+            retry: {
+                config: {
+                    retries: 3,
+                    delay: 1000
+                }
+            }
+        }
+    }
+};
+```
+
+---
+
+### Examples - TS
+
+```ts
+import { RouteConfig } from "file-routing-expressjs";
+
+export const config: RouteConfig = {
+    plugins: {
+        get: {
+            cache: true,
+
+            timeout: {
+                config: {
+                    ms: 5000
+                }
+            }
+        },
+
+        post: {
+            retry: {
+                config: {
+                    retries: 3
+                }
+            }
+        }
+    }
+};
+```
+
+**Note**: Any route handlers that are not explicitly defined will use the `all` plugins if they exist.
